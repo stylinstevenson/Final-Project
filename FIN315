@@ -1,0 +1,205 @@
+#Final Project: Is There Trading Opportunity in WallStreetBets?
+#https://www.wsj.com/articles/wall-street-is-looking-to-reddit-for-investment-advice-11630056648
+#
+#"Wall Street professionals tell everyday investors what stocks to buy. But now they have to follow some of these amateurs for signs of where the market is headed next.
+#
+#Venerable institutions Goldman Sachs Group Inc. and Morgan Stanley are tracking the retail trading frenzy, and hedge funds in New York and London have employees combing through the internet forum of Reddit, Twitter or chat startup Discord in search of trading opportunities. They turned to these sources following a period of market mayhem dominated by amateurs on Reddit’s WallStreetBets and the Robinhood Markets Inc. trading app who collectively boosted the shares of GameStop Corp. and other companies that had fallen out of Wall Street’s favor."
+#
+#The purpose of this final project is to examine whether there is trading opportunity in WallStreetBets.
+
+--
+#Part 1: Obtain WallStreetBets Data
+
+%pip install praw
+
+import praw
+import pandas as pd
+from collections import Counter
+import matplotlib.pyplot as plt
+import numpy as np
+%pip install Quandl
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+import quandl
+%pip install finnhub-python
+import finnhub
+import datetime
+import pandas_datareader
+import pandas_datareader.data as web
+from IPython.display import display, Math, Latex
+from scipy.stats import norm
+
+--
+reddit = praw.Reddit( client_id="ZpDGr5jljWBSF4iSFRHwoQ",         # your client id
+                                client_secret="qFlRpmTL9o9byxG0DC4hCrbXX9kOWA",      # your client secret
+                                user_agent="quoc")        # your user agent
+
+subreddit = reddit.subreddit("wallstreetbets")
+
+for post in subreddit.hot(limit=None):
+    print(post.title)
+    print()
+
+
+posts = subreddit.top("day")
+# Scraping the top posts of the current month
+
+posts_dict = {"Title": [], "Post Text": [],
+                "ID": [], "Score": [],
+                "Total Comments": [], "Post URL": []
+            }
+
+for post in posts:
+    # Title of each post
+    posts_dict["Title"].append(post.title)
+
+    # Text inside a post
+    posts_dict["Post Text"].append(post.selftext)
+
+    # Unique ID of each post
+    posts_dict["ID"].append(post.id)
+
+    # The score of a post
+    posts_dict["Score"].append(post.score)
+
+    # Total number of comments inside the post
+    posts_dict["Total Comments"].append(post.num_comments)
+
+    # URL of each post
+    posts_dict["Post URL"].append(post.url)
+
+# Saving the data in a pandas dataframe
+top_posts = pd.DataFrame(posts_dict)
+top_posts.head(10)
+
+top_posts.to_csv("Top Posts.csv", index=True)
+
+top_posts
+
+
+--
+
+# for item in top_posts['Post URL']:
+#     if 'comment' in item:
+#         print(item)
+import re
+
+for item in top_posts['Title']:
+  x = re.findall("[A-Z]+\s", item)
+  print(item)
+  if 'I ' not in x and 'WSB ' not in x:
+      print(x)  
+
+
+# -- #
+
+lm = pd.read_csv("/content/drive/MyDrive/FIN315/Week 8/LoughranMcDonald_2016.csv")
+
+words2weights = {}
+
+for index, r in lm.iterrows():
+    pos_score = 1. if r['Positive'] != 0 else 0.
+    neg_score = 1. if r['Negative'] != 0 else 0.
+    sentiment_score = pos_score - neg_score
+
+    w = str(r['Word']).lower()
+    if sentiment_score:
+        words2weights[w] = sentiment_score
+    
+words2weights
+
+# -- #
+
+title = 'Russia warns that if Western countries refuse to import Russian oil, oil prices will soar to more than $300'
+
+for word in words2weights:
+    matches = re.findall(word, title, re.MULTILINE)
+    if len(matches) > 0:
+        print(word + ": " + str(len(matches)*words2weights[word]))
+        print(words2weights[word])
+
+
+--
+
+#Part 2: Merge the data
+#Compute cumulative returns
+#
+#Import return.csv data
+#
+#Compute the next day return, future 1-week cumulative return, future 1-month cumulative return, and future 3-month cumulative return for all stocks that are mentioned in WallStreetBets' postings.
+#
+#Merge WallStreetBets data with the return data and Fama-French 3-factors data.
+#
+#Merge the data by ticker and date.
+
+--
+
+ret = pd.read_csv('/content/drive/MyDrive/FIN315/Week 7/returns.csv')
+ret
+
+df = []
+for post in reddit.subreddit('wallstreetbets').top(limit=None):
+  content = {
+    "title" : post.title,
+    "text" : post.selftext
+  }
+  df.append(content)
+df = pd.DataFrame(df)
+
+
+regex = re.compile('[^a-zA-Z ]')
+word_dict = {}
+for (index, row) in df.iterrows():
+  
+  title = row['title']
+  title = regex.sub('', title)
+  title_words = title.split(' ')
+  
+  content = row['text']
+  content = regex.sub('', content)
+  content_words = content.split(' ')
+  
+  words = title_words + content_words
+  for x in words:
+    if x in ['A', 'B', 'GO', 'ARE', 'ON', 'I', 'YOU', 'WE', ' ', 'THE']:
+      pass
+    
+    elif x in word_dict:
+      word_dict[x] += 1
+    else:
+      word_dict[x] = 1
+word_df = pd.DataFrame.from_dict(list(word_dict.items())).rename(columns = {0:"Term", 1:"Frequency"})
+
+
+NYSE = pd.read_csv('/content/drive/MyDrive/FIN315/NYSE.csv').rename(columns = {"Name":"Company Name"})
+NASDAQ = pd.read_csv('/content/drive/MyDrive/FIN315/NASDAQ.csv').rename(columns = {"Name":"Company Name"})
+AMEX = pd.read_csv('/content/drive/MyDrive/FIN315/AMEX.csv').rename(columns = {"Name":"Company Name"})
+
+merge1 = pd.merge(NYSE, NASDAQ, how = 'outer')
+ticker_df = pd.merge(merge1, AMEX, how = 'outer')
+
+ticker_df
+
+--
+
+NYSE = pd.read_csv('/content/drive/MyDrive/FIN315/NYSE.csv').rename(columns = {"Symbol":"Term", "Name":"Company Name"})
+NASDAQ = pd.read_csv('/content/drive/MyDrive/FIN315/NASDAQ.csv').rename(columns = {"Symbol":"Term", "Name":"Company Name"})
+AMEX = pd.read_csv('/content/drive/MyDrive/FIN315/AMEX.csv').rename(columns = {"Symbol":"Term", "Name":"Company Name"})
+
+merge1 = pd.merge(NYSE, NASDAQ, how = 'outer')
+ticker_df = pd.merge(merge1, AMEX, how = 'outer')
+
+ticker_df
+
+--
+
+#Part 3: Analysis
+#Run tests to examine whether WallStreetBets postings can predict future stock return.
+#
+#Does the number of comments matter?
+#
+#Does the sector matter?
+#
+#Are there "star" posters?
+#
+#Benchmark your returns with the 3-factor model. Is alpha generated by this strategy significant?
